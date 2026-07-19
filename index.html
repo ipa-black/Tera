@@ -30,7 +30,6 @@
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif; -webkit-tap-highlight-color: transparent; }
         
-        /* استخدام 100dvh لملء الشاشة الحقيقية للهاتف بدون مشاكل المتصفح */
         body { background-color: var(--coffee); height: 100dvh; display: flex; justify-content: center; overflow: hidden; }
         
         /* --- شاشة الدخول --- */
@@ -45,7 +44,7 @@
         /* --- الواجهة الرئيسية (التطبيق) --- */
         #app-screen { width: 100%; max-width: 480px; height: 100%; display: none; flex-direction: column; background-color: var(--desert-light); position: relative; }
         
-        /* الشريط العلوي (مراعاة النوتش Safe Area) */
+        /* الشريط العلوي */
         .chat-header { display: flex; align-items: center; justify-content: space-between; background-color: var(--coffee); padding: calc(10px + env(safe-area-inset-top)) 15px 10px 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 10; }
         .header-info { display: flex; align-items: center; gap: 12px; }
         .header-avatar { width: 42px; height: 42px; border-radius: 50%; background-color: var(--white); color: var(--coffee); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; }
@@ -62,7 +61,7 @@
         .chat-box { flex: 1; overflow-y: auto; padding: 15px 15px 100px 15px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
         .chat-box::-webkit-scrollbar { display: none; }
         
-        /* فقاعات الرسائل (تلجرام ستايل) */
+        /* فقاعات الرسائل */
         .message { max-width: 82%; padding: 10px 14px; font-size: 16px; line-height: 1.4; word-wrap: break-word; box-shadow: 0 1px 2px rgba(0,0,0,0.08); position: relative; }
         .sent { align-self: flex-start; background-color: var(--desert); color: var(--text-dark); border-radius: 16px 16px 4px 16px; }
         .received { align-self: flex-end; background-color: var(--white); color: var(--text-dark); border-radius: 16px 16px 16px 4px; }
@@ -74,7 +73,7 @@
         .msg-image { max-width: 100%; border-radius: 10px; margin-bottom: 5px; cursor: pointer; display: block; }
         .msg-audio { max-width: 100%; height: 40px; outline: none; margin-bottom: 5px; }
 
-        /* شريط الإدخال (مراعاة الشريط السفلي للآيفون Safe Area) */
+        /* شريط الإدخال */
         .chat-input-area { position: absolute; bottom: 0; left: 0; right: 0; background-color: var(--white); display: flex; align-items: flex-end; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)) 12px; gap: 8px; box-shadow: 0 -1px 5px rgba(0,0,0,0.05); }
         .attach-btn { background: none; border: none; font-size: 26px; color: var(--gray); cursor: pointer; padding: 5px; display: flex; align-items: center; }
         
@@ -205,6 +204,9 @@
                     if (change.type === "added") displayMessage(change.doc.data(), mode);
                 });
                 setTimeout(() => chatBox.scrollTop = chatBox.scrollHeight, 100);
+            }, (error) => {
+                // ✅ تنبيه في حال فشل قراءة الرسائل من القاعدة
+                alert("مشكلة في الاتصال بالقاعدة: " + error.message);
             });
         }
 
@@ -240,7 +242,11 @@
                     payload.owner = currentUser;
                     await addDoc(collection(db, "saved_messages"), payload);
                 }
-            } catch (e) { console.error("Error: ", e); }
+            } catch (e) {
+                // ✅ تنبيه يوضح سبب فشل إرسال الرسالة بدقة
+                alert("خطأ في الإرسال: " + e.message); 
+                console.error("Error: ", e); 
+            }
         }
 
         const inputField = document.getElementById("message-input");
@@ -277,7 +283,9 @@
                 await uploadBytes(storageRef, file);
                 const url = await getDownloadURL(storageRef);
                 await sendToDB({ imageUrl: url });
-            } catch(error) { alert("حدث خطأ في الرفع"); }
+            } catch(error) { 
+                alert("حدث خطأ في الرفع: " + error.message); 
+            }
             attachBtn.style.opacity = "1";
             e.target.value = ""; 
         });
@@ -301,7 +309,7 @@
                             await uploadBytes(storageRef, audioBlob);
                             const url = await getDownloadURL(storageRef);
                             await sendToDB({ audioUrl: url });
-                        } catch(err) { alert("فشل رفع البصمة"); }
+                        } catch(err) { alert("فشل رفع البصمة: " + err.message); }
                     };
                     mediaRecorder.start();
                     isRecording = true;
