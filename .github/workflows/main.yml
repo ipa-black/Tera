@@ -1,0 +1,59 @@
+name: IQTV IPA Analysis
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # يتيح لك تشغيل الأكشن يدوياً من صفحة GitHub
+
+jobs:
+  analyze:
+    runs-on: macos-latest # بيئة ماك لاستخدام أدوات آبل الأصلية
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Prepare Directories
+        run: |
+          mkdir extracted_ipa
+          mkdir analysis_results
+
+      - name: Unzip IPA
+        run: |
+          echo "جاري فك ضغط تطبيق IQTV..."
+          # ملاحظة: تأكد أن اسم التطبيق المرفوع في المستودع هو IQTV.ipa بالضبط
+          unzip -q IQTV.ipa -d extracted_ipa || { echo "لم يتم العثور على ملف IQTV.ipa، تأكد من الاسم!"; exit 1; }
+
+      - name: Locate App and Binary
+        id: locate
+        run: |
+          # البحث التلقائي عن مجلد التطبيق والملف التنفيذي
+          APP_DIR=$(find extracted_ipa/Payload -maxdepth 1 -name "*.app" | head -n 1)
+          APP_NAME=$(basename "$APP_DIR" .app)
+          BINARY_PATH="$APP_DIR/$APP_NAME"
+          
+          # حفظ المسارات
+          echo "APP_DIR=$APP_DIR" >> $GITHUB_ENV
+          echo "BINARY_PATH=$BINARY_PATH" >> $GITHUB_ENV
+
+      - name: 1. Extract Info.plist (إعدادات وصلاحيات IQTV)
+        run: |
+          echo "استخراج ملفات الـ Plist..."
+          plutil -p "${{ env.APP_DIR }}/Info.plist" > analysis_results/1_Info_plist_dump.txt
+
+      - name: 2. Extract Strings (الروابط، السيرفرات، ومفاتيح API)
+        run: |
+          echo "استخراج النصوص البرمجية من داخل ملف IQTV..."
+          strings "${{ env.BINARY_PATH }}" > analysis_results/2_Binary_Strings.txt
+
+      - name: 3. Extract Linked Libraries (المكتبات المستخدمة للبث)
+        run: |
+          echo "استخراج المكتبات المرتبطة بالتطبيق..."
+          otool -L "${{ env.BINARY_PATH }}" > analysis_results/3_Linked_Libraries.txt
+
+      - name: Upload Analysis Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: IQTV-Full-Analysis-Reports
+          path: analysis_results/
