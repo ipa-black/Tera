@@ -1,78 +1,111 @@
-name: Universal App Extractor (IPA & APK)
+name: Advanced Reverse Engineering (With Cache)
 
 on:
-  workflow_dispatch: # لتشغيل الأكشن يدوياً
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: 'رابط مباشر للتطبيق (يجب أن يكون رابط تحميل مباشر)'
+        required: true
+        type: string
+      app_type:
+        description: 'نوع التطبيق'
+        required: true
+        type: choice
+        options:
+          - apk
+          - ipa
 
 jobs:
-  analyze_app:
-    runs-on: macos-latest
+  reverse_engineer:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Android Tools (Apktool)
-        run: brew install apktool
+      - name: Setup Java (Required for Jadx & Apktool)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Prepare Workspace
-        run: mkdir ultimate_analysis
+      # 1. إعداد الكاش للأدوات لتسريع العمليات المستقبلية
+      - name: Cache Reverse Engineering Tools
+        id: cache-tools
+        uses: actions/cache@v4
+        with:
+          path: ~/re-tools
+          key: re-tools-v1-ubuntu
 
-      - name: Detect and Analyze App
+      # 2. تحميل الأدوات فقط إذا لم تكن موجودة في الكاش
+      - name: Download & Install Tools (If not cached)
+        if: steps.cache-tools.outputs.cache-hit != 'true'
         run: |
-          # البحث عن أي ملف ipa أو apk في المجلد الرئيسي
-          TARGET_FILE=$(find . -maxdepth 1 \( -name "*.ipa" -o -name "*.apk" \) | head -n 1)
+          mkdir -p ~/re-tools
+          cd ~/re-tools
           
-          if [ -z "$TARGET_FILE" ]; then
-            echo "❌ لم يتم العثور على أي ملف .ipa أو .apk في المستودع!"
-            exit 1
-          fi
+          # تحميل Jadx
+          wget -q https://github.com/skylot/jadx/releases/download/v1.4.7/jadx-1.4.7.zip
+          unzip -q jadx-1.4.7.zip -d jadx_dir
           
-          echo "✅ تم العثور على الملف: $TARGET_FILE"
+          # تحميل Apktool
+          wget -q https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.9.3.jar -O apktool.jar
+          wget -q https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/linux/apktool -O apktool
+          chmod +x apktool apktool.jar
+
+      - name: Install System Dependencies (Radare2)
+        # Radare2 موجود في مستودعات أوبونتو، نحمله مباشرة
+        run: sudo apt-get update && sudo apt-get install -y radare2
+
+      # 3. تحميل التطبيق من الرابط الذي أدخله المستخدم
+      - name: Download Target Application
+        run: curl -L "${{ inputs.app_url }}" -o target_app.${{ inputs.app_type }}
+
+      # 4. هندسة عكسية لتطبيقات الأندرويد (APK)
+      - name: Analyze APK
+        if: inputs.app_type == 'apk'
+        run: |
+          mkdir -p output/apk_jadx
+          mkdir -p output/apk_apktool
           
-          # استخراج صيغة الملف (Extension)
-          EXT="${TARGET_FILE##*.}"
+          echo "[*] Running Jadx (Java Source Code)..."
+          ~/re-tools/jadx_dir/bin/jadx -d output/apk_jadx target_app.apk
           
-          if [ "$EXT" == "ipa" ]; then
-            echo "======================================"
-            echo "🍎 بدء تحليل تطبيق iOS (IPA)..."
-            echo "======================================"
+          echo "[*] Running Apktool (Smali & XML Resources)..."
+          cp ~/re-tools/apktool* .
+          ./apktool d target_app.apk -o output/apk_apktool -f
+
+      # 5. هندسة عكسية لتطبيقات الآيفون (IPA)
+      - name: Analyze IPA
+        if: inputs.app_type == 'ipa'
+        run: |
+          mkdir -p output/ipa_extracted
+          mkdir -p output/ipa_analysis
+          
+          echo "[*] Unzipping IPA..."
+          unzip -q target_app.ipa -d output/ipa_extracted
+          
+          echo "[*] Extracting Binary Information using Radare2 & Strings..."
+          # البحث عن الملف التنفيذي الأساسي داخل مجلد Payload
+          APP_DIR=$(find output/ipa_extracted/Payload -type d -name "*.app" | head -n 1)
+          APP_NAME=$(basename "$APP_DIR" .app)
+          BINARY_PATH="$APP_DIR/$APP_NAME"
+          
+          if [ -f "$BINARY_PATH" ]; then
+            echo "Binary found: $BINARY_PATH"
+            # استخراج النصوص (Strings) لفهم السيرفرات ومفاتيح الـ API
+            strings "$BINARY_PATH" > output/ipa_analysis/extracted_strings.txt
             
-            mkdir extracted_ipa
-            mkdir ultimate_analysis/Bundled_Resources
-            unzip -q "$TARGET_FILE" -d extracted_ipa
-            
-            # العثور على مجلد التطبيق والملف التنفيذي
-            APP_DIR=$(find extracted_ipa/Payload -maxdepth 1 -name "*.app" | head -n 1)
-            APP_NAME=$(basename "$APP_DIR" .app)
-            BINARY_PATH="$APP_DIR/$APP_NAME"
-            
-            echo "1. استخراج Info.plist والصلاحيات..."
-            plutil -p "$APP_DIR/Info.plist" > ultimate_analysis/1_Info_plist.txt || true
-            codesign -d --entitlements :- "$APP_DIR" > ultimate_analysis/2_Entitlements.xml || true
-            
-            echo "2. استخراج النصوص، الروابط، والمكتبات..."
-            strings "$BINARY_PATH" > ultimate_analysis/3_Strings.txt || true
-            otool -L "$BINARY_PATH" > ultimate_analysis/4_Libraries.txt || true
-            
-            echo "3. استخراج قواعد البيانات والملفات المدمجة..."
-            find "$APP_DIR" -type f \( -name "*.sqlite" -o -name "*.db" -o -name "*.json" -o -name "*.js" -o -name "*.m3u" \) -exec cp {} ultimate_analysis/Bundled_Resources/ \; || true
-            
-          elif [ "$EXT" == "apk" ]; then
-            echo "======================================"
-            echo "🤖 بدء تحليل تطبيق Android (APK)..."
-            echo "======================================"
-            
-            # 1. استخدام Apktool لتفكيك التطبيق بالكامل
-            echo "جاري تفكيك ملف الـ APK (قد يستغرق بعض الوقت)..."
-            apktool d "$TARGET_FILE" -o ultimate_analysis/apk_decompiled
-            
-            # 2. استخراج النصوص والروابط المباشرة
-            echo "استخراج النصوص السريعة..."
-            strings "$TARGET_FILE" > ultimate_analysis/APK_Strings_Dump.txt || true
+            # استخدام Radare2 لاستخراج معلومات الملف التنفيذي
+            rabin2 -I "$BINARY_PATH" > output/ipa_analysis/binary_info.txt
+            rabin2 -S "$BINARY_PATH" > output/ipa_analysis/binary_sections.txt
+          else
+            echo "Executable binary not found!"
           fi
 
-      - name: Upload Final Results
+      # 6. رفع النتائج كملف ZIP لتتمكن من تحميله
+      - name: Upload Analyzed Data
         uses: actions/upload-artifact@v4
         with:
-          name: Extracted-App-Data
-          path: ultimate_analysis/
+          name: Reverse-Engineering-Result-${{ inputs.app_type }}
+          path: output/
