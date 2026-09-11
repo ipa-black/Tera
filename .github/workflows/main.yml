@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       app_url:
-        description: 'رابط مباشر للتطبيق (يجب أن يكون رابط تحميل مباشر)'
+        description: 'رابط مباشر للتطبيق (يجب أن يكون رابط تحميل مباشر ينتهي بـ apk أو ipa)'
         required: true
         type: string
       app_type:
@@ -35,9 +35,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/re-tools
-          key: re-tools-v2-ubuntu # تم تغيير المفتاح لتحديث الكاش القديم
+          key: re-tools-v2-ubuntu
 
-      # 2. تحميل الأدوات فقط إذا لم تكن موجودة في الكاش (تم إصلاح روابط التحميل هنا)
+      # 2. تحميل الأدوات إذا لم تكن موجودة في الكاش
       - name: Download & Install Tools (If not cached)
         if: steps.cache-tools.outputs.cache-hit != 'true'
         run: |
@@ -48,19 +48,50 @@ jobs:
           wget -q https://github.com/skylot/jadx/releases/download/v1.4.7/jadx-1.4.7.zip
           unzip -q jadx-1.4.7.zip -d jadx_dir
           
-          # تحميل Apktool (من الروابط الرسمية الجديدة على جيت هب)
+          # تحميل Apktool (الروابط الرسمية المحدثة)
           wget -q https://github.com/iBotPeaches/Apktool/releases/download/v2.9.3/apktool_2.9.3.jar -O apktool.jar
           wget -q https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/linux/apktool -O apktool
           chmod +x apktool apktool.jar
 
+      # 3. تثبيت أدوات النظام المساعدة
       - name: Install System Dependencies (Radare2)
         run: sudo apt-get update && sudo apt-get install -y radare2
 
-      # 3. تحميل التطبيق من الرابط الذي أدخله المستخدم
-      - name: Download Target Application
-        run: curl -L "${{ inputs.app_url }}" -o target_app.${{ inputs.app_type }}
+      # 4. خطوة التحميل والفحص الذكي لسلامة الملف
+      - name: Download and Validate Target Application
+        run: |
+          echo "[*] Downloading app from provided URL..."
+          curl -L "${{ inputs.app_url }}" -o target_app.${{ inputs.app_type }}
+          
+          echo "[*] File downloaded. Checking file details..."
+          ls -lh target_app.${{ inputs.app_type }}
+          
+          # فحص نوع الملف الحقيقي
+          FILE_TYPE=$(file -b target_app.${{ inputs.app_type }})
+          echo "Actual file type: $FILE_TYPE"
+          
+          # التحقق مما إذا كان الملف هو ملف ZIP حقيقي
+          if ! echo "$FILE_TYPE" | grep -qi "Zip archive data"; then
+            echo "================================================================"
+            echo "[خطأ فادح]: الملف الذي تم تحميله ليس تطبيقاً حقيقياً (ليس بصيغة Zip)."
+            echo "نوع الملف المحمل هو: $FILE_TYPE"
+            echo "هذا يعني أن الرابط غير مباشر أو محمي ضد التحميل التلقائي."
+            echo "================================================================"
+            exit 1
+          fi
+          
+          # فحص إضافي للتأكد من أن الملف ليس معطوباً
+          echo "[*] Verifying ZIP archive integrity..."
+          if ! unzip -tq target_app.${{ inputs.app_type }}; then
+            echo "================================================================"
+            echo "[خطأ فادح]: الملف الذي تم تحميله معطوب أو غير مكتمل (Corrupted/Incomplete)."
+            echo "يرجى استخدام رابط تحميل مختلف."
+            echo "================================================================"
+            exit 1
+          fi
+          echo "[نجاح]: الملف سليم ومكتمل ومستعد لعملية الهندسة العكسية!"
 
-      # 4. هندسة عكسية لتطبيقات الأندرويد (APK)
+      # 5. تفكيك تطبيقات الأندرويد
       - name: Analyze APK
         if: inputs.app_type == 'apk'
         run: |
@@ -74,7 +105,7 @@ jobs:
           cp ~/re-tools/apktool* .
           ./apktool d target_app.apk -o output/apk_apktool -f
 
-      # 5. هندسة عكسية لتطبيقات الآيفون (IPA)
+      # 6. تحليل تطبيقات الآيفون
       - name: Analyze IPA
         if: inputs.app_type == 'ipa'
         run: |
@@ -85,24 +116,20 @@ jobs:
           unzip -q target_app.ipa -d output/ipa_extracted
           
           echo "[*] Extracting Binary Information using Radare2 & Strings..."
-          # البحث عن الملف التنفيذي الأساسي داخل مجلد Payload
           APP_DIR=$(find output/ipa_extracted/Payload -type d -name "*.app" | head -n 1)
           APP_NAME=$(basename "$APP_DIR" .app)
           BINARY_PATH="$APP_DIR/$APP_NAME"
           
           if [ -f "$BINARY_PATH" ]; then
             echo "Binary found: $BINARY_PATH"
-            # استخراج النصوص (Strings) لفهم السيرفرات ومفاتيح الـ API
             strings "$BINARY_PATH" > output/ipa_analysis/extracted_strings.txt
-            
-            # استخدام Radare2 لاستخراج معلومات الملف التنفيذي
             rabin2 -I "$BINARY_PATH" > output/ipa_analysis/binary_info.txt
             rabin2 -S "$BINARY_PATH" > output/ipa_analysis/binary_sections.txt
           else
             echo "Executable binary not found!"
           fi
 
-      # 6. رفع النتائج كملف ZIP لتتمكن من تحميله
+      # 7. رفع النتائج كملف للتحميل
       - name: Upload Analyzed Data
         uses: actions/upload-artifact@v4
         with:
