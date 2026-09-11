@@ -1,0 +1,51 @@
+name: Dump iOS Headers (class-dump)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ipa_url:
+        description: 'رابط مباشر لملف الـ IPA الخاص باللعبة المعدلة'
+        required: true
+        type: string
+
+jobs:
+  dump_headers:
+    runs-on: macos-latest
+
+    steps:
+      - name: Download and Validate IPA
+        run: |
+          echo "[*] Downloading IPA..."
+          curl -L "${{ inputs.ipa_url }}" -o game.ipa
+          
+          FILE_TYPE=$(file -b game.ipa)
+          if ! echo "$FILE_TYPE" | grep -qi "Zip archive data"; then
+            echo "[خطأ فادح]: الملف ليس تطبيقاً صالحاً. يرجى التأكد من الرابط."
+            exit 1
+          fi
+          echo "[نجاح] تم تحميل التطبيق."
+
+      - name: Extract IPA
+        run: unzip -q game.ipa -d extracted
+
+      - name: Locate Mach-O Binary
+        run: |
+          APP_DIR=$(find extracted/Payload -type d -name "*.app" | head -n 1)
+          APP_NAME=$(basename "$APP_DIR" .app)
+          echo "BINARY_PATH=$APP_DIR/$APP_NAME" >> $GITHUB_ENV
+          echo "Found Binary: $APP_DIR/$APP_NAME"
+
+      - name: Install class-dump
+        run: brew install class-dump
+
+      - name: Dump Headers
+        run: |
+          mkdir Headers
+          echo "[*] Extracting Headers..."
+          class-dump -H "$BINARY_PATH" -o Headers/ || echo "[ملاحظة] تم الاستخراج متجاهلاً الملفات المشفرة."
+
+      - name: Upload Headers
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOS-Game-Headers
+          path: Headers/
