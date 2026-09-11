@@ -29,7 +29,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 1. إعداد الكاش للأدوات لتسريع العمليات المستقبلية
       - name: Cache Reverse Engineering Tools
         id: cache-tools
         uses: actions/cache@v4
@@ -37,7 +36,6 @@ jobs:
           path: ~/re-tools
           key: re-tools-v2-ubuntu
 
-      # 2. تحميل الأدوات إذا لم تكن موجودة في الكاش
       - name: Download & Install Tools (If not cached)
         if: steps.cache-tools.outputs.cache-hit != 'true'
         run: |
@@ -48,16 +46,15 @@ jobs:
           wget -q https://github.com/skylot/jadx/releases/download/v1.4.7/jadx-1.4.7.zip
           unzip -q jadx-1.4.7.zip -d jadx_dir
           
-          # تحميل Apktool (الروابط الرسمية المحدثة)
+          # تحميل Apktool
           wget -q https://github.com/iBotPeaches/Apktool/releases/download/v2.9.3/apktool_2.9.3.jar -O apktool.jar
           wget -q https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/linux/apktool -O apktool
           chmod +x apktool apktool.jar
 
-      # 3. تثبيت أدوات النظام المساعدة
       - name: Install System Dependencies (Radare2)
         run: sudo apt-get update && sudo apt-get install -y radare2
 
-      # 4. خطوة التحميل والفحص الذكي لسلامة الملف
+      # 4. خطوة التحميل والفحص المرن (النسخة المصححة)
       - name: Download and Validate Target Application
         run: |
           echo "[*] Downloading app from provided URL..."
@@ -70,28 +67,25 @@ jobs:
           FILE_TYPE=$(file -b target_app.${{ inputs.app_type }})
           echo "Actual file type: $FILE_TYPE"
           
-          # التحقق مما إذا كان الملف هو ملف ZIP حقيقي
-          if ! echo "$FILE_TYPE" | grep -qi "Zip archive data"; then
+          # إيقاف العملية فقط إذا كان الملف المؤكد هو صفحة ويب أو نص خطأ
+          if echo "$FILE_TYPE" | grep -qiE "HTML|ASCII text"; then
             echo "================================================================"
-            echo "[خطأ فادح]: الملف الذي تم تحميله ليس تطبيقاً حقيقياً (ليس بصيغة Zip)."
-            echo "نوع الملف المحمل هو: $FILE_TYPE"
-            echo "هذا يعني أن الرابط غير مباشر أو محمي ضد التحميل التلقائي."
+            echo "[خطأ فادح]: الملف الذي تم تحميله ليس تطبيقاً (غالباً صفحة ويب أو رسالة خطأ)."
+            echo "يرجى التأكد من استخدام رابط تحميل مباشر."
             echo "================================================================"
             exit 1
           fi
           
-          # فحص إضافي للتأكد من أن الملف ليس معطوباً
-          echo "[*] Verifying ZIP archive integrity..."
+          # الفحص النهائي والحقيقي: هل يمكن فك ضغطه؟
+          echo "[*] Verifying Application integrity..."
           if ! unzip -tq target_app.${{ inputs.app_type }}; then
             echo "================================================================"
-            echo "[خطأ فادح]: الملف الذي تم تحميله معطوب أو غير مكتمل (Corrupted/Incomplete)."
-            echo "يرجى استخدام رابط تحميل مختلف."
+            echo "[خطأ فادح]: التطبيق الذي تم تحميله معطوب (Corrupted) أو لم يكتمل تحميله."
             echo "================================================================"
             exit 1
           fi
           echo "[نجاح]: الملف سليم ومكتمل ومستعد لعملية الهندسة العكسية!"
 
-      # 5. تفكيك تطبيقات الأندرويد
       - name: Analyze APK
         if: inputs.app_type == 'apk'
         run: |
@@ -105,7 +99,6 @@ jobs:
           cp ~/re-tools/apktool* .
           ./apktool d target_app.apk -o output/apk_apktool -f
 
-      # 6. تحليل تطبيقات الآيفون
       - name: Analyze IPA
         if: inputs.app_type == 'ipa'
         run: |
@@ -129,7 +122,6 @@ jobs:
             echo "Executable binary not found!"
           fi
 
-      # 7. رفع النتائج كملف للتحميل
       - name: Upload Analyzed Data
         uses: actions/upload-artifact@v4
         with:
