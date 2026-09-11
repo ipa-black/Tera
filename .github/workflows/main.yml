@@ -35,9 +35,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/re-tools
-          key: re-tools-v1-ubuntu
+          key: re-tools-v2-ubuntu # تم تغيير المفتاح لتحديث الكاش القديم
 
-      # 2. تحميل الأدوات فقط إذا لم تكن موجودة في الكاش
+      # 2. تحميل الأدوات فقط إذا لم تكن موجودة في الكاش (تم إصلاح روابط التحميل هنا)
       - name: Download & Install Tools (If not cached)
         if: steps.cache-tools.outputs.cache-hit != 'true'
         run: |
@@ -48,13 +48,12 @@ jobs:
           wget -q https://github.com/skylot/jadx/releases/download/v1.4.7/jadx-1.4.7.zip
           unzip -q jadx-1.4.7.zip -d jadx_dir
           
-          # تحميل Apktool
-          wget -q https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.9.3.jar -O apktool.jar
+          # تحميل Apktool (من الروابط الرسمية الجديدة على جيت هب)
+          wget -q https://github.com/iBotPeaches/Apktool/releases/download/v2.9.3/apktool_2.9.3.jar -O apktool.jar
           wget -q https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/linux/apktool -O apktool
           chmod +x apktool apktool.jar
 
       - name: Install System Dependencies (Radare2)
-        # Radare2 موجود في مستودعات أوبونتو، نحمله مباشرة
         run: sudo apt-get update && sudo apt-get install -y radare2
 
       # 3. تحميل التطبيق من الرابط الذي أدخله المستخدم
