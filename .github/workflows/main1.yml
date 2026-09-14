@@ -1,4 +1,4 @@
-name: Dump iOS Headers (dsdump)
+name: Dump iOS Headers (dsdump + Strings)
 
 on:
   workflow_dispatch:
@@ -28,29 +28,36 @@ jobs:
       - name: Extract IPA
         run: unzip -q game.ipa -d extracted
 
-      - name: Locate Mach-O Binary
+      # التحديث الجوهري: استخراج المسار الدقيق للملف من Info.plist
+      - name: Locate Exact Mach-O Binary
         run: |
           APP_DIR=$(find extracted/Payload -type d -name "*.app" | head -n 1)
-          APP_NAME=$(basename "$APP_DIR" .app)
-          echo "BINARY_PATH=$APP_DIR/$APP_NAME" >> $GITHUB_ENV
-          echo "Found Binary: $APP_DIR/$APP_NAME"
+          EXEC_NAME=$(plutil -extract CFBundleExecutable raw "$APP_DIR/Info.plist")
+          BINARY_PATH="$APP_DIR/$EXEC_NAME"
+          echo "BINARY_PATH=$BINARY_PATH" >> $GITHUB_ENV
+          echo "Exact Binary Found: $BINARY_PATH"
+          # فحص حجم الملف للتأكد أنه حقيقي وليس فارغاً
+          ls -lh "$BINARY_PATH"
 
-      # التحميل المباشر للملف التنفيذي (بدون فك ضغط وبدون أخطاء)
-      - name: Install dsdump (Direct Binary)
+      - name: Install dsdump
         run: |
           echo "[*] Downloading dsdump directly..."
           curl -L "https://github.com/DerekSelander/dsdump/raw/master/dsdump_mac_os_x" -o dsdump
           chmod +x dsdump
           sudo mv dsdump /usr/local/bin/
 
-      - name: Dump Headers
+      - name: Dump Headers & Strings (The Ultimate Extraction)
         run: |
           mkdir Headers
           echo "[*] Extracting Objective-C and Swift classes..."
-          # استخراج كود الأوبجكتف-سي في ملف نصي واحد
           dsdump --objc "$BINARY_PATH" > Headers/ObjectiveC_Classes.txt || true
-          # استخراج كود سويفت في ملف نصي واحد
           dsdump --swift "$BINARY_PATH" > Headers/Swift_Classes.txt || true
+          
+          echo "[*] Extracting all texts, API links, and symbols (Fallback)..."
+          # استخراج جميع النصوص الصريحة (روابط السيرفرات، رسائل الخطأ، أكواد التفعيل)
+          strings "$BINARY_PATH" > Headers/App_Strings.txt
+          # استخراج جميع دوال اللعبة الداخلية
+          nm -a "$BINARY_PATH" > Headers/App_Symbols.txt || true
 
       - name: Upload Headers
         uses: actions/upload-artifact@v4
