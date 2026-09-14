@@ -1,70 +1,26 @@
-name: Hack Mod Menu (libloader)
-
+name: Extract Mod Offsets
 on:
-  workflow_dispatch:
-    inputs:
-      ipa_url:
-        description: 'رابط مباشر لملف الـ IPA الخاص باللعبة المعدلة'
-        required: true
-        type: string
+  push:
+    branches: [ main ]
+  workflow_dispatch: # يسمح لك بتشغيل السكربت يدوياً
 
 jobs:
-  dump_mod_menu:
-    runs-on: macos-latest
-
+  build:
+    runs-on: ubuntu-latest
     steps:
-      - name: Download and Validate IPA
-        run: |
-          echo "[*] Downloading IPA..."
-          curl -L "${{ inputs.ipa_url }}" -o game.ipa
-          
-          FILE_TYPE=$(file -b game.ipa)
-          if ! echo "$FILE_TYPE" | grep -qi "Zip archive data"; then
-            echo "[خطأ فادح]: الملف ليس تطبيقاً صالحاً. يرجى التأكد من الرابط."
-            exit 1
-          fi
-          echo "[نجاح] تم تحميل التطبيق."
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-      - name: Extract IPA
-        run: unzip -q game.ipa -d extracted
-
-      - name: Locate Target Mod Menu (libloader)
-        run: |
-          # البحث المباشر عن الملف التنفيذي داخل مجلد libloader.framework
-          TARGET_BINARY=$(find extracted/Payload -type f -path "*/Frameworks/libloader.framework/libloader" | head -n 1)
-          
-          if [ -z "$TARGET_BINARY" ]; then
-            echo "[خطأ] لم يتم العثور على ملف libloader!"
-            exit 1
-          fi
-          
-          echo "TARGET_BINARY=$TARGET_BINARY" >> $GITHUB_ENV
-          echo "Found Mod Menu Binary: $TARGET_BINARY"
-          ls -lh "$TARGET_BINARY"
-
-      - name: Install dsdump
-        run: |
-          echo "[*] Downloading dsdump directly..."
-          curl -L "https://github.com/DerekSelander/dsdump/raw/master/dsdump_mac_os_x" -o dsdump
-          chmod +x dsdump
-          sudo mv dsdump /usr/local/bin/
-
-      - name: Dump Mod Menu Secrets
-        run: |
-          mkdir ModMenu_Secrets
-          echo "[*] Extracting Classes from libloader..."
-          
-          # استخراج كلاسات الأوبجكتف-سي والسويفت الخاصة بالقائمة
-          dsdump --objc "$TARGET_BINARY" > ModMenu_Secrets/Mod_Classes.txt || true
-          dsdump --swift "$TARGET_BINARY" > ModMenu_Secrets/Mod_Swift_Classes.txt || true
-          
-          echo "[*] Extracting Mod Menu Strings & Symbols..."
-          # استخراج النصوص (مثل روابط السيرفر أو رسائل الكود الخاطئ)
-          strings "$TARGET_BINARY" > ModMenu_Secrets/Mod_Strings.txt
-          nm -a "$TARGET_BINARY" > ModMenu_Secrets/Mod_Symbols.txt || true
-
-      - name: Upload Secrets
-        uses: actions/upload-artifact@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          name: ModMenu-Hacked-Data
-          path: ModMenu_Secrets/
+          python-version: '3.10'
+
+      - name: Run Extraction Script
+        run: python extract_headers.py
+
+      - name: Upload JSON Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Offsets-JSON
+          path: extracted_offsets.json
