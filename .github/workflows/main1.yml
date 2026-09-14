@@ -17,8 +17,8 @@ jobs:
           python-version: '3.10'
 
       - name: Unzip Headers File (With Password)
-        # تمت إضافة -P 1 لإدخال كلمة السر الخاصة بالملف
-        run: unzip -P 1 headers.zip -d ./
+        # وضعنا علامات تنصيص لأن اسم الملف يحتوي على مسافات
+        run: unzip -P 1 "8 Ball Pool_header.zip" -d ./
 
       - name: Run Extraction Script
         run: python extract_headers.py
