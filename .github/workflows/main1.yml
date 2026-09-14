@@ -1,4 +1,4 @@
-name: Dump iOS Headers (class-dump)
+name: Dump iOS Headers (dsdump)
 
 on:
   workflow_dispatch:
@@ -35,17 +35,25 @@ jobs:
           echo "BINARY_PATH=$APP_DIR/$APP_NAME" >> $GITHUB_ENV
           echo "Found Binary: $APP_DIR/$APP_NAME"
 
-      - name: Install class-dump
-        run: brew install class-dump
+      # استخدام أداة dsdump الحديثة بدلاً من class-dump
+      - name: Install dsdump (Modern Alternative)
+        run: |
+          curl -L "https://github.com/DerekSelander/dsdump/releases/download/v0.2.2/dsdump_mac_os_x.zip" -o dsdump.zip
+          unzip dsdump.zip
+          chmod +x dsdump
+          sudo mv dsdump /usr/local/bin/
 
       - name: Dump Headers
         run: |
           mkdir Headers
-          echo "[*] Extracting Headers..."
-          class-dump -H "$BINARY_PATH" -o Headers/ || echo "[ملاحظة] تم الاستخراج متجاهلاً الملفات المشفرة."
+          echo "[*] Extracting Objective-C and Swift classes..."
+          # استخراج كود الأوبجكتف-سي في ملف نصي واحد
+          dsdump --objc "$BINARY_PATH" > Headers/ObjectiveC_Classes.txt || true
+          # استخراج كود سويفت في ملف نصي واحد
+          dsdump --swift "$BINARY_PATH" > Headers/Swift_Classes.txt || true
 
       - name: Upload Headers
         uses: actions/upload-artifact@v4
         with:
-          name: iOS-Game-Headers
+          name: iOS-Game-Classes-Dump
           path: Headers/
