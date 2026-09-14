@@ -35,11 +35,11 @@ jobs:
           echo "BINARY_PATH=$APP_DIR/$APP_NAME" >> $GITHUB_ENV
           echo "Found Binary: $APP_DIR/$APP_NAME"
 
-      # استخدام أداة dsdump الحديثة بدلاً من class-dump
-      - name: Install dsdump (Modern Alternative)
+      # التحميل المباشر للملف التنفيذي (بدون فك ضغط وبدون أخطاء)
+      - name: Install dsdump (Direct Binary)
         run: |
-          curl -L "https://github.com/DerekSelander/dsdump/releases/download/v0.2.2/dsdump_mac_os_x.zip" -o dsdump.zip
-          unzip dsdump.zip
+          echo "[*] Downloading dsdump directly..."
+          curl -L "https://github.com/DerekSelander/dsdump/raw/master/dsdump_mac_os_x" -o dsdump
           chmod +x dsdump
           sudo mv dsdump /usr/local/bin/
 
