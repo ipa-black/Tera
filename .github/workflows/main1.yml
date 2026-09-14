@@ -2,7 +2,7 @@ name: Extract Mod Offsets
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # يسمح لك بتشغيل السكربت يدوياً
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,6 +15,10 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+
+      - name: Unzip Headers File (With Password)
+        # تمت إضافة -P 1 لإدخال كلمة السر الخاصة بالملف
+        run: unzip -P 1 headers.zip -d ./
 
       - name: Run Extraction Script
         run: python extract_headers.py
