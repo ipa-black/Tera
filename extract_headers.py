@@ -1,14 +1,9 @@
 import os
 import json
-import re
 
-# اسم المجلد الذي يحتوي على الملفات (تأكد أن اسمه مطابق في مستودعك)
+# اسم المجلد الذي يحتوي على الملفات بعد فك الضغط
 header_dir = '8 Ball Pool_header'
 result = {}
-
-# البحث عن الكلاسات والأوفستات (أي سطر ينتهي بـ // 0x...)
-class_re = re.compile(r'@interface\s+([A-Za-z0-9_]+)')
-offset_re = re.compile(r'(.*?)\s*//\s*(0x[0-9a-fA-F]+)')
 
 if not os.path.exists(header_dir):
     print(f"Error: Directory '{header_dir}' not found!")
@@ -17,35 +12,37 @@ if not os.path.exists(header_dir):
 for filename in os.listdir(header_dir):
     if filename.endswith('.h'):
         filepath = os.path.join(header_dir, filename)
-        current_class = filename.replace('.h', '')
-        class_data = {"offsets": []}
+        class_name = filename.replace('.h', '')
+        extracted_lines = []
         
         with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
             for line in f:
                 line = line.strip()
                 
-                # تحديث اسم الكلاس إذا وجدناه في الكود
-                match_class = class_re.search(line)
-                if match_class:
-                    current_class = match_class.group(1)
+                # تجاهل الأسطر الفارغة أو الأقواس لوحدها أو استدعاءات المكاتب العادية
+                if not line or line.startswith('#import') or line.startswith('#include') or line in ['{', '}', '};']:
+                    continue
                 
-                # سحب الدالة/المتغير مع الأوفست
-                match_offset = offset_re.search(line)
-                if match_offset:
-                    code_part = match_offset.group(1).strip()
-                    offset_part = match_offset.group(2).strip()
-                    if code_part:
-                        class_data["offsets"].append({
-                            "code": code_part,
-                            "offset": offset_part
-                        })
+                # استخراج كل شيء مهم:
+                # 1. أي سطر فيه 0x (أوفست)
+                # 2. الدوال (تحتوي على أقواس)
+                # 3. الخصائص المتغيرات
+                # 4. أسماء الكلاسات
+                if ('0x' in line.lower() or 
+                    '(' in line or 
+                    '@property' in line or 
+                    '@interface' in line or 
+                    'class ' in line or 
+                    'struct ' in line):
+                    
+                    extracted_lines.append(line)
         
-        # حفظ الكلاس فقط إذا كان يحتوي على أوفستات مهمة
-        if class_data["offsets"]:
-            result[current_class] = class_data
+        # إذا وجدنا أي بيانات مهمة في الملف، نحفظها باسم الكلاس
+        if extracted_lines:
+            result[class_name] = extracted_lines
 
-# تصدير النتيجة إلى ملف JSON
+# حفظ الناتج في نفس ملف الـ JSON
 with open('extracted_offsets.json', 'w', encoding='utf-8') as out_file:
     json.dump(result, out_file, indent=4, ensure_ascii=False)
 
-print("✅ تم استخراج جميع الأوفستات بنجاح إلى extracted_offsets.json")
+print(f"✅ تم استخراج كل البيانات بنجاح من {len(result)} ملف!")
