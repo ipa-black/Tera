@@ -46,14 +46,17 @@ jobs:
           
           cd ..
           
-          # إنشاء ملف الـ JSON وكتابة المعلومات داخله
-          echo '{
+          # إنشاء ملف الـ JSON وكتابة المعلومات داخله بطريقة نظيفة
+          TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          cat <<EOF > extraction_info.json
+          {
             "target_url": "${{ github.event.inputs.zip_url }}",
-            "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+            "timestamp": "${TIMESTAMP}",
             "github_run_id": "${{ github.run_id }}",
-            "jadx_folder_status": "'"$JADX_STATUS"'",
-            "apktool_folder_status": "'"$APKTOOL_STATUS"'"
-          }' > extraction_info.json
+            "jadx_folder_status": "${JADX_STATUS}",
+            "apktool_folder_status": "${APKTOOL_STATUS}"
+          }
+          EOF
 
       - name: Upload JADX Source Code
         uses: actions/upload-artifact@v4
