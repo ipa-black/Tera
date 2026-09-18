@@ -1,0 +1,48 @@
+name: Download, Extract, and Repackage RE Files
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_url:
+        description: 'ضع الرابط المباشر للملف المضغوط (Direct ZIP URL)'
+        required: true
+        type: string
+
+jobs:
+  process_zip_from_url:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download the ZIP file
+        run: |
+          echo "Downloading file from the URL provided by LO..."
+          # تحميل الملف من الرابط وتسميته target_file.zip
+          wget -qO target_file.zip "${{ github.event.inputs.zip_url }}"
+          
+      - name: Extract the Downloaded ZIP
+        run: |
+          echo "Extracting the downloaded ZIP..."
+          # إنشاء مجلد وتفريغ محتويات الملف داخله
+          unzip -q target_file.zip -d extracted_contents/
+          
+      - name: Compress Target Folders (JADX & APKTool)
+        run: |
+          echo "Searching for apk_jadx and apk_apktool inside the extracted folder..."
+          cd extracted_contents
+          # ضغط المجلدين إذا كانا موجودين
+          zip -r ../apk_jadx_ready.zip apk_jadx/ || echo "apk_jadx not found in this zip!"
+          zip -r ../apk_apktool_ready.zip apk_apktool/ || echo "apk_apktool not found in this zip!"
+
+      - name: Upload JADX Source Code
+        uses: actions/upload-artifact@v4
+        with:
+          name: JADX_Source_Code
+          path: apk_jadx_ready.zip
+          retention-days: 7
+
+      - name: Upload APKTool Resources
+        uses: actions/upload-artifact@v4
+        with:
+          name: APKTool_Smali_Res
+          path: apk_apktool_ready.zip
+          retention-days: 7
