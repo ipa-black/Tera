@@ -16,22 +16,44 @@ jobs:
       - name: Download the ZIP file
         run: |
           echo "Downloading file from the URL provided by LO..."
-          # تحميل الملف من الرابط وتسميته target_file.zip
           wget -qO target_file.zip "${{ github.event.inputs.zip_url }}"
           
       - name: Extract the Downloaded ZIP
         run: |
           echo "Extracting the downloaded ZIP..."
-          # إنشاء مجلد وتفريغ محتويات الملف داخله
           unzip -q target_file.zip -d extracted_contents/
           
-      - name: Compress Target Folders (JADX & APKTool)
+      - name: Compress Target Folders & Generate JSON
         run: |
-          echo "Searching for apk_jadx and apk_apktool inside the extracted folder..."
+          echo "Processing folders and generating JSON for LO..."
           cd extracted_contents
-          # ضغط المجلدين إذا كانا موجودين
-          zip -r ../apk_jadx_ready.zip apk_jadx/ || echo "apk_jadx not found in this zip!"
-          zip -r ../apk_apktool_ready.zip apk_apktool/ || echo "apk_apktool not found in this zip!"
+          
+          # متغيرات لتتبع حالة المجلدات
+          JADX_STATUS="Not Found"
+          APKTOOL_STATUS="Not Found"
+          
+          # التحقق من وجود مجلد jadx وضغطه
+          if [ -d "apk_jadx" ]; then
+            zip -r ../apk_jadx_ready.zip apk_jadx/
+            JADX_STATUS="Found and Compressed"
+          fi
+          
+          # التحقق من وجود مجلد apktool وضغطه
+          if [ -d "apk_apktool" ]; then
+            zip -r ../apk_apktool_ready.zip apk_apktool/
+            APKTOOL_STATUS="Found and Compressed"
+          fi
+          
+          cd ..
+          
+          # إنشاء ملف الـ JSON وكتابة المعلومات داخله
+          echo '{
+            "target_url": "${{ github.event.inputs.zip_url }}",
+            "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+            "github_run_id": "${{ github.run_id }}",
+            "jadx_folder_status": "'"$JADX_STATUS"'",
+            "apktool_folder_status": "'"$APKTOOL_STATUS"'"
+          }' > extraction_info.json
 
       - name: Upload JADX Source Code
         uses: actions/upload-artifact@v4
@@ -45,4 +67,11 @@ jobs:
         with:
           name: APKTool_Smali_Res
           path: apk_apktool_ready.zip
+          retention-days: 7
+          
+      - name: Upload JSON Info File
+        uses: actions/upload-artifact@v4
+        with:
+          name: Extraction_Information_JSON
+          path: extraction_info.json
           retention-days: 7
